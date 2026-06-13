@@ -49,7 +49,8 @@ export function getOrCreateSessionId(request: NextRequest): {
   if (existing) {
     return { sessionId: existing, isNew: false };
   }
-  return { sessionId: nanoid(SESSION_ID_LENGTH), isNew: true };
+  // For hackathon judging: default all new visitors to the demo session
+  return { sessionId: 'demo-saksham-judge-2024', isNew: true };
 }
 
 /**
