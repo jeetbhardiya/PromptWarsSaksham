@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { setSessionCookie } from '@/lib/session';
 import { db } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import {
@@ -64,14 +65,14 @@ const DEMO_MOOD_LOGS = [
 ];
 
 /**
- * POST /api/seed
- * Seeds demo data for judges. Protected by DEMO_SECRET in production.
- * Only works in development OR with the correct secret header.
+ * GET /api/seed
+ * Seeds demo data for judges and sets the browser session cookie to the demo ID.
+ * Protected by DEMO_SECRET in production.
  */
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   // Security: only allow in dev or with secret
   if (process.env.NODE_ENV === 'production') {
-    const secret = request.headers.get('x-demo-secret');
+    const secret = request.headers.get('x-demo-secret') || request.nextUrl.searchParams.get('secret');
     if (secret !== process.env.DEMO_SECRET) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -88,10 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     for (const entry of DEMO_ENTRIES) {
       await db.insert(journalEntries).values({
         userId: DEMO_SESSION_ID,
-        content: entry.content,
-        moodScore: entry.moodScore,
-        aiReflection: entry.aiReflection,
-        createdAt: entry.createdAt,
+        ...entry,
         updatedAt: entry.createdAt,
       });
     }
@@ -107,13 +105,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Insert a detected trigger
+    // Insert demo triggers and patterns
+    await db.insert(stressTriggers).values({
+      userId: DEMO_SESSION_ID,
+      trigger: 'mock_scores',
+      category: 'mock_scores',
+      frequency: 3,
+      confidenceScore: 0.95,
+    });
+
     await db.insert(stressTriggers).values({
       userId: DEMO_SESSION_ID,
       trigger: 'peer_comparison',
       category: 'peer_comparison',
-      frequency: 3,
-      confidenceScore: 0.82,
+      frequency: 2,
+      confidenceScore: 0.85,
     });
 
     await db.insert(stressTriggers).values({
@@ -132,13 +138,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       metadata: { consecutiveLowDays: 3 },
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      message: `Seeded demo session: ${DEMO_SESSION_ID}`,
+      message: `Seeded demo session: ${DEMO_SESSION_ID} and set browser cookie!`,
       demoSessionId: DEMO_SESSION_ID,
       entries: DEMO_ENTRIES.length,
       moodLogs: DEMO_MOOD_LOGS.length,
     });
+
+    // CRITICAL: Set the session cookie so the browser actually uses this demo data!
+    return setSessionCookie(response, DEMO_SESSION_ID);
+    
   } catch (error) {
     console.error('[Seed] Error:', error);
     return NextResponse.json(
