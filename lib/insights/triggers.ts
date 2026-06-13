@@ -185,6 +185,14 @@ const TRIGGER_TAXONOMY: Record<
   },
 };
 
+/** Precomputed max possible score per entry for confidence normalization (1.5 = max recency weight) */
+const MAX_POSSIBLE_SCORE =
+  Math.max(
+    ...Object.values(TRIGGER_TAXONOMY).map((t) =>
+      t.keywords.reduce((sum, k) => sum + k.weight, 0)
+    )
+  ) * 1.5;
+
 /** Recency weight — entries from the last 7 days count more */
 function getRecencyWeight(createdAt: Date): number {
   const daysSince =
@@ -258,19 +266,13 @@ export function extractTriggers(entries: JournalEntry[]): DetectedTrigger[] {
     }
   }
 
-  // Normalize scores to 0–1 confidence and build output
-  const maxPossibleScore =
-    Math.max(...Object.values(TRIGGER_TAXONOMY).map((t) => 
-      t.keywords.reduce((sum, k) => sum + k.weight, 0)
-    )) * 1.5; // 1.5 max recency weight
-
   const results: DetectedTrigger[] = [];
 
   for (const [key, taxonomy] of Object.entries(TRIGGER_TAXONOMY)) {
     const scores = triggerScores[key];
     if (scores.frequency === 0) continue;
 
-    const rawConfidence = scores.weightedScore / (entries.length * maxPossibleScore);
+    const rawConfidence = scores.weightedScore / (entries.length * MAX_POSSIBLE_SCORE);
     const confidenceScore = Math.min(1, rawConfidence * 3); // scale up for visibility
 
     if (confidenceScore > 0.05) {

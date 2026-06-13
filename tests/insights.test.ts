@@ -216,4 +216,78 @@ describe('detectPatterns', () => {
       expect(prevOrder).toBeLessThanOrEqual(currOrder);
     }
   });
+
+  it('detects chronically low mood (avg < 2.2, 5+ data points)', () => {
+    const logs = [2, 1, 2, 1, 1, 2].map((score, i) =>
+      makeMoodLog(score, 5 - i)
+    );
+    const patterns = detectPatterns(logs);
+    const chronic = patterns.find((p) => p.patternType === 'chronically_low');
+    expect(chronic).toBeDefined();
+    expect(chronic!.severity).toMatch(/moderate|severe/);
+  });
+
+  it('detects improving mood trend with slope > 0.2 and avg >= 3', () => {
+    // Clear upward slope starting from 3 baseline
+    const logs = [3, 3, 4, 4, 5, 5].map((score, i) =>
+      makeMoodLog(score, 5 - i)
+    );
+    const patterns = detectPatterns(logs);
+    const improving = patterns.find((p) => p.patternType === 'improving_mood');
+    expect(improving).toBeDefined();
+  });
+
+  it('does not flag chronically low when fewer than 5 data points', () => {
+    const logs = [1, 1, 2, 1].map((score, i) => makeMoodLog(score, 3 - i));
+    const patterns = detectPatterns(logs);
+    const chronic = patterns.find((p) => p.patternType === 'chronically_low');
+    expect(chronic).toBeUndefined();
+  });
+
+  it('returns empty for exactly 2 data points', () => {
+    expect(detectPatterns([makeMoodLog(1, 1), makeMoodLog(1, 0)])).toEqual([]);
+  });
+});
+
+// ─── Additional extractTriggers tests ─────────────────────────────────────────
+
+describe('extractTriggers — additional triggers', () => {
+  it('detects time_pressure trigger', () => {
+    const entries = [
+      makeEntry('I have so much to study and not enough time. Syllabus is huge.'),
+      makeEntry('Running out of time. Behind schedule by 3 chapters. Overwhelmed.'),
+    ];
+    const triggers = extractTriggers(entries);
+    const timeTrigger = triggers.find((t) => t.trigger === 'time_pressure');
+    expect(timeTrigger).toBeDefined();
+    expect(timeTrigger!.frequency).toBe(2);
+  });
+
+  it('detects self_doubt trigger', () => {
+    const entries = [
+      makeEntry("I am not smart enough for this. I can't do this anymore."),
+      makeEntry('I am not cut out for NEET. Why am I even trying? I am a failure.'),
+    ];
+    const triggers = extractTriggers(entries);
+    const doubtTrigger = triggers.find((t) => t.trigger === 'self_doubt');
+    expect(doubtTrigger).toBeDefined();
+  });
+
+  it('detects exam_dates for JEE and GATE keywords', () => {
+    const entries = [
+      makeEntry('JEE Advanced date is approaching. The cutoff will be very high this year.'),
+      makeEntry('I need to score well in GATE. The exam date was announced.'),
+    ];
+    const triggers = extractTriggers(entries);
+    const examTrigger = triggers.find((t) => t.trigger === 'exam_dates');
+    expect(examTrigger).toBeDefined();
+  });
+
+  it('detects multiple triggers in the same entries', () => {
+    const entries = [
+      makeEntry('Mock score dropped. Topper friend aced it. Papa is disappointed. No sleep.', 2),
+    ];
+    const triggers = extractTriggers(entries);
+    expect(triggers.length).toBeGreaterThanOrEqual(3);
+  });
 });

@@ -21,6 +21,9 @@ import { nanoid } from 'nanoid';
 
 const SESSION_COOKIE_NAME = 'saksham_session';
 const SESSION_ID_LENGTH = 21; // nanoid default, cryptographically secure
+const SESSION_COOKIE_REGEX = new RegExp(
+  `(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`
+);
 
 /**
  * Reads the session ID from the request cookie.
@@ -85,8 +88,6 @@ export function parseSessionFromCookieHeader(
   cookieHeader: string | null
 ): string | null {
   if (!cookieHeader) return null;
-  const match = cookieHeader.match(
-    new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`)
-  );
+  const match = cookieHeader.match(SESSION_COOKIE_REGEX);
   return match ? match[1] : null;
 }

@@ -249,8 +249,6 @@ export async function recommendMindfulnessExercise(
   mood: number,
   insights: InsightContext
 ): Promise<{ exercise: string; rationale: string }> {
-  const exercises = ['box_breathing', 'grounding_54321', 'progressive_muscle_relaxation'];
-
   // Deterministic recommendation based on mood (no LLM needed for this)
   if (mood <= 2) {
     return {

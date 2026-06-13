@@ -11,8 +11,8 @@ export { detectPatterns } from './patterns';
 export type { DetectedPattern } from './patterns';
 
 import type { JournalEntry, MoodLog } from '../db/schema';
-import { extractTriggers } from './triggers';
-import { detectPatterns } from './patterns';
+import { extractTriggers, type DetectedTrigger } from './triggers';
+import { detectPatterns, type DetectedPattern } from './patterns';
 
 /**
  * The structured context object passed to the AI service.
@@ -45,18 +45,21 @@ export interface InsightContext {
 
 /**
  * Builds a comprehensive InsightContext from raw data.
- * This is the single entry point the AI service should call to get personalized context.
+ * Accepts optional pre-computed triggers/patterns to avoid redundant computation
+ * when callers (e.g. insights route) have already run the insight engine.
  *
  * @param entries - Recent journal entries for trigger analysis
  * @param moodLogs - Recent mood logs for pattern detection
+ * @param precomputed - Optional pre-computed triggers and patterns
  * @returns Structured InsightContext for AI prompt injection
  */
 export function buildInsightContext(
   entries: JournalEntry[],
-  moodLogs: MoodLog[]
+  moodLogs: MoodLog[],
+  precomputed?: { triggers?: DetectedTrigger[]; patterns?: DetectedPattern[] }
 ): InsightContext {
-  const triggers = extractTriggers(entries);
-  const patterns = detectPatterns(moodLogs);
+  const triggers = precomputed?.triggers ?? extractTriggers(entries);
+  const patterns = precomputed?.patterns ?? detectPatterns(moodLogs);
 
   const scores = moodLogs.map((m) => m.score);
   const averageMood =
@@ -64,20 +67,13 @@ export function buildInsightContext(
       ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
       : 3;
 
-  const currentMood =
-    moodLogs.length > 0
-      ? [...moodLogs].sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )[0].score
-      : null;
+  // moodLogs from DB are ordered newest-first; no sort needed
+  const currentMood = moodLogs.length > 0 ? moodLogs[0].score : null;
 
-  // Calculate streak (days from first entry to now)
+  // entries from DB are ordered newest-first; last element is oldest
   let streakDays = 0;
   if (entries.length > 0) {
-    const oldest = entries.reduce((oldest, e) =>
-      new Date(e.createdAt) < new Date(oldest.createdAt) ? e : oldest
-    );
+    const oldest = entries[entries.length - 1];
     streakDays = Math.ceil(
       (Date.now() - new Date(oldest.createdAt).getTime()) / (1000 * 60 * 60 * 24)
     );
